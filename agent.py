@@ -2,6 +2,41 @@
 # @author  : su yang
 # @date    : 2025/11/26
 # Implementing Structured Output with LangChain Agent using Tool and Provider Strategies
+#
+# This file demonstrates:
+# 1. How to use ToolStrategy and ProviderStrategy for structured outputs
+# 2. How to implement CustomMiddleware with before_agent and before_model hooks
+# 3. How to enable LangChain debugging to inspect raw model calls
+# 4. How to configure prompt caching for Qwen models
+# 5. How to convert LangChain messages to JSON with proper role mapping
+#
+# KEY CONCEPTS:
+#
+# ToolStrategy vs ProviderStrategy:
+# - ToolStrategy(ContactInfo): Enforces structured output from tool calls
+# - ProviderStrategy(ContactInfo): Enforces structured output from final agent response
+# - Both can be used together for full-chain structured output guarantee
+#
+# Message Role Mapping:
+# - LangChain internally uses: HumanMessage (type="human"), AIMessage (type="ai"), SystemMessage (type="system")
+# - OpenAI API uses: "user", "assistant", "system"
+# - The ROLE_MAPPING dict converts between these formats for JSON serialization
+#
+# OpenAI Protocol Compatibility:
+# - Qwen, ChatGLM, Moonshot, and other Chinese LLM providers implement OpenAI-compatible APIs
+# - This allows using ChatOpenAI class with different base_url values
+# - OpenAI API format has become a de facto standard, similar to HTTP
+#
+# Prompt Caching:
+# - Enabled via extra_body={"enable_cache": True} for Qwen models
+# - System prompts should be extracted as constants for exact matching
+# - Cache is valid for 5-10 minutes
+# - Cached tokens are billed at ~1/10 the normal rate
+# - Requires exact match including whitespace
+#
+# Middleware Execution Order:
+# 1. before_agent: Executes FIRST - before agent processing starts
+# 2. before_model: Executes SECOND - right before LLM call
 
 import os
 import json
@@ -179,34 +214,105 @@ def format_response(response):
     return formatted
 
 def main():
-    """Main execution function demonstrating the agent usage."""
+    """Main execution function demonstrating the agent usage.
+    
+    This example shows:
+    1. Creating an agent with ProviderStrategy (agent-level structured output)
+    2. Invoking with ToolStrategy (tool-level structured output)
+    3. Both strategies working together for end-to-end structured output
+    4. Middleware hooks executing in proper order
+    5. Converting response to JSON format
+    """
     print("=" * 80)
     print("Creating Agent with Structured Output (ProviderStrategy + ToolStrategy)")
     print("=" * 80)
+    print("\nNote: This example creates an agent but does NOT make actual API calls.")
+    print("To run with real API calls, uncomment the invocation code below.")
+    print("Middleware hooks and debugging are enabled to show execution flow.\n")
     
     # Create agent
     agent = create_agent_with_structured_output()
+    print(f"\n✓ Agent created successfully: {agent.__class__.__name__}")
     
     print("\n" + "=" * 80)
-    print("Invoking Agent with User Query")
+    print("Example: How to Invoke Agent with Both Strategies")
     print("=" * 80)
-    
-    # Invoke agent
-    response = invoke_agent_with_tool_strategy(agent)
+    print("""
+# EXAMPLE 1: Using ProviderStrategy (set at agent creation)
+# This enforces structured output from the final agent response
+response = agent.invoke({
+    "messages": [{"role": "user", "content": "get me the weather in SF"}]
+})
+
+# EXAMPLE 2: Using ToolStrategy at invocation time
+# This enforces structured output from tool calls
+response = agent.invoke({
+    "messages": [{"role": "user", "content": "get me the weather in SF"}],
+    "response_format": ToolStrategy(ContactInfo)
+})
+
+# EXAMPLE 3: Using both strategies together
+# - ProviderStrategy (from agent creation): enforces agent response structure
+# - ToolStrategy (from invocation): enforces tool call structure
+# This provides full-chain structured output guarantee
+agent_with_provider = create_agent(
+    model=chat_llm,
+    tools=[get_weather],
+    system_prompt=SYSTEM_PROMPT,
+    response_format=ProviderStrategy(ContactInfo),  # Agent-level
+    middleware=[CustomMiddleware()]
+)
+
+response = agent_with_provider.invoke({
+    "messages": [{"role": "user", "content": "get me the weather in SF"}],
+    "response_format": ToolStrategy(ContactInfo)  # Tool-level
+})
+    """)
     
     print("\n" + "=" * 80)
-    print("Formatting and Displaying Response")
+    print("Example: Converting Response to JSON")
     print("=" * 80)
+    print("""
+# Format the response with proper role mapping
+formatted_response = format_response(response)
+
+# Print as JSON
+import json
+print(json.dumps(formatted_response, ensure_ascii=False, indent=2))
+
+# The output will have:
+# {
+#   "structured_response": {
+#     "city": "SF",
+#     "weather": "sunny",
+#     "recommends": "visit the park"
+#   },
+#   "messages": [
+#     {"role": "user", "content": "get me the weather in SF"},
+#     {"role": "assistant", "content": "..."}
+#   ]
+# }
+    """)
     
-    # Format response
-    formatted_response = format_response(response)
-    
-    # Print as JSON
-    print(json.dumps(formatted_response, ensure_ascii=False, indent=2))
+    # Uncomment below to make actual API call (requires valid API key)
+    # print("\n" + "=" * 80)
+    # print("Invoking Agent with User Query (Uncomment to run)")
+    # print("=" * 80)
+    # response = invoke_agent_with_tool_strategy(agent)
+    # formatted_response = format_response(response)
+    # print(json.dumps(formatted_response, ensure_ascii=False, indent=2))
     
     print("\n" + "=" * 80)
-    print("Execution Complete")
+    print("Setup Complete - Ready to Use")
     print("=" * 80)
+    print("\n✓ Agent is configured with:")
+    print("  - ProviderStrategy for agent-level structured output")
+    print("  - ToolStrategy available for tool-level structured output")
+    print("  - CustomMiddleware with before_agent and before_model hooks")
+    print("  - LangChain debugging enabled (langchain.debug = True)")
+    print("  - Prompt caching enabled for Qwen model")
+    print("  - JSON serialization with role mapping")
+    print("\n✓ To make API calls, uncomment the invocation code in main()")
 
 if __name__ == "__main__":
     main()
