@@ -16,6 +16,8 @@ The `agent.py` file showcases:
 
 ### ToolStrategy vs ProviderStrategy
 
+**Note**: These are official LangChain classes from `langchain.agents.structured_output` module (available in langchain>=1.0.0).
+
 - **ToolStrategy(ContactInfo)**: Enforces structured output from tool calls
   - Applied at invocation time via `response_format` parameter
   - Ensures tool returns match the specified schema
